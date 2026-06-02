@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import pygame; print\\('Pygame', pygame.version.ver\\)\")",
+      "Bash(timeout 3 python main.py)",
+      "Bash(sleep 3 && cat /dev/null  # wait then check)",
+      "Read(//dev/**)",
+      "Bash(timeout 4 python main.py)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 4 python main.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 5 python main.py)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 6 python main.py)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 5 python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 timeout 6 python -c ' *)",
+      "Bash(timeout 5 python -c ' *)",
+      "Bash(python3 -c ' *)",
+      "Bash(where python *)"
+    ]
+  }
+}
