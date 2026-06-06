@@ -1,3 +1,4 @@
+from collections import deque
 from config import COLS, ROWS, Direction
 
 
@@ -8,23 +9,37 @@ class Snake:
         # 蛇身：列表 of (col, row)，下标 0 为蛇头
         self.body = [(COLS // 2, ROWS // 2)]
         self.direction = Direction.RIGHT
-        self._next_direction = Direction.RIGHT
+        # 输入缓冲队列：缓存最近 3 个方向输入，支持快速 L 形转弯
+        self._dir_queue = deque([Direction.RIGHT], maxlen=3)
         self._growing = False
 
     def set_direction(self, direction):
-        """防止反向移动"""
+        """将方向输入加入缓冲队列，防止反向移动"""
         opposites = {
             Direction.UP: Direction.DOWN,
             Direction.DOWN: Direction.UP,
             Direction.LEFT: Direction.RIGHT,
             Direction.RIGHT: Direction.LEFT,
         }
-        if direction != opposites.get(self.direction):
-            self._next_direction = direction
+        # 校验队列末尾（即将应用的方向），而非当前方向
+        last = self._dir_queue[-1] if self._dir_queue else self.direction
+        if direction != opposites.get(last):
+            self._dir_queue.append(direction)
 
     def move(self):
         """前进一格"""
-        self.direction = self._next_direction
+        # 从队列中取出下一个方向
+        if self._dir_queue:
+            next_dir = self._dir_queue.popleft()
+            # 防止队列中残留的反向方向（双重保险）
+            opposites = {
+                Direction.UP: Direction.DOWN,
+                Direction.DOWN: Direction.UP,
+                Direction.LEFT: Direction.RIGHT,
+                Direction.RIGHT: Direction.LEFT,
+            }
+            if next_dir != opposites.get(self.direction):
+                self.direction = next_dir
         head = self.body[0]
         dx, dy = self.direction
         new_head = (head[0] + dx, head[1] + dy)

@@ -56,6 +56,11 @@ TITLES = [
 HUD_PADDING = 14
 HUD_BG_COLOR = (15, 15, 30)
 
+# 移动速度（帧/步，越小越快）
+MOVE_INTERVAL_BASE = 7       # 初始速度 ≈8.6 步/秒
+MOVE_INTERVAL_MIN = 4        # 最快速度 = 15 步/秒
+SPEED_UP_PER_WORD = 1        # 每完成1个单词，间隔减1
+
 # 反馈显示时长（帧数）
 FEEDBACK_DURATION = 90
 QUESTION_DONE_DURATION = 90

@@ -3,6 +3,7 @@ import pygame
 from config import (
     TITLE, FPS, COLS, ROWS, Direction, GameState,
     FEEDBACK_DURATION, QUESTION_DONE_DURATION, TIMER_PENALTY_SECONDS,
+    MOVE_INTERVAL_BASE, MOVE_INTERVAL_MIN, SPEED_UP_PER_WORD,
 )
 from game.snake import Snake
 from game.letter_manager import LetterManager
@@ -12,9 +13,6 @@ from systems.timer import QuestionTimer
 from systems.event_bus import EventBus, SNAKE_MOVE, LETTER_CORRECT, LETTER_WRONG, WORD_COMPLETE, GAME_OVER, TIME_UP
 from ui.renderer import Renderer
 from ui.effects import ScreenEffects, FLASH_CORRECT, FLASH_WRONG, FLASH_COMPLETE
-
-
-MOVE_INTERVAL = 12
 
 
 class GameDirector:
@@ -36,6 +34,7 @@ class GameDirector:
         self.score_mgr = ScoreManager()
         self.timer = QuestionTimer()
         self._move_counter = 0
+        self._move_interval = MOVE_INTERVAL_BASE
 
         # 题库
         if question_path is None:
@@ -96,6 +95,11 @@ class GameDirector:
         """加载下一题"""
         self.current_question = self.question_bank.get_next()
         self.snake = Snake()
+        # 速度递增：每完成1个单词，移动间隔减少1帧（更快）
+        self._move_interval = max(
+            MOVE_INTERVAL_MIN,
+            MOVE_INTERVAL_BASE - self.score_mgr.word_count * SPEED_UP_PER_WORD,
+        )
         occupied = set(self.snake.body)
         self.letter_manager.spawn(
             self.current_question.answer,
@@ -129,7 +133,7 @@ class GameDirector:
             return
 
         self._move_counter += 1
-        if self._move_counter < MOVE_INTERVAL:
+        if self._move_counter < self._move_interval:
             return
         self._move_counter = 0
 
