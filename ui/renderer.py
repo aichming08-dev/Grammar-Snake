@@ -150,17 +150,25 @@ class Renderer:
             color = GREEN if i == 0 else DARK_GREEN
             pygame.draw.rect(self.screen, color, (x, icon_y, 24, 24), border_radius=6)
 
-        # 副标题（闪烁效果）
-        tick = pygame.time.get_ticks()
-        alpha = int(128 + 127 * math.sin(tick * 0.004))
-        sub_font = pygame.font.SysFont("arial", 24)
-        sub_surf = sub_font.render("Press any key to start", True, WHITE)
-        sub_surf.set_alpha(alpha)
-        sub_rect = sub_surf.get_rect(center=(400, 380))
-        self.screen.blit(sub_surf, sub_rect)
+        # 模式选择
+        mode_font = pygame.font.SysFont("arial", 22, bold=True)
+        hint_font = pygame.font.SysFont("arial", 16)
+        modes = [
+            ("1", "Normal Mode", "Standard gameplay with hints", (100, 255, 120)),
+            ("2", "Practice Mode", "Focus on weak categories", (100, 200, 255)),
+            ("3", "Challenge Mode", "Faster speed, no hints", (255, 150, 100)),
+        ]
+        y = 350
+        for key, name, desc, color in modes:
+            key_surf = mode_font.render(f"[{key}]", True, color)
+            name_surf = mode_font.render(name, True, WHITE)
+            desc_surf = hint_font.render(desc, True, (120, 120, 140))
+            self.screen.blit(key_surf, (220, y))
+            self.screen.blit(name_surf, (270, y))
+            self.screen.blit(desc_surf, (270, y + 26))
+            y += 58
 
         # 操作提示
-        hint_font = pygame.font.SysFont("arial", 16)
         hints = [
             "Arrow Keys - Move",
             "P - Pause",
@@ -168,7 +176,7 @@ class Renderer:
         ]
         for i, hint in enumerate(hints):
             h_surf = hint_font.render(hint, True, (120, 120, 140))
-            h_rect = h_surf.get_rect(center=(400, 440 + i * 24))
+            h_rect = h_surf.get_rect(center=(400, 540 + i * 22))
             self.screen.blit(h_surf, h_rect)
 
     # ── 输入答案画面 ──
@@ -249,6 +257,53 @@ class Renderer:
         hints_surf = font_hint2.render(hints, True, (100, 100, 120))
         hints_rect = hints_surf.get_rect(center=(400, 500))
         self.screen.blit(hints_surf, hints_rect)
+
+    # ── 复习画面 ──
+
+    def draw_review_screen(self, question, score_mgr=None, is_correct: bool = True):
+        """答题后复习画面：完整句子 + 语法规则 + 分数"""
+        self.screen.fill(BG_COLOR)
+
+        # 状态标识
+        status_color = (80, 255, 80) if is_correct else (255, 100, 100)
+        status_text = "✓ CORRECT" if is_correct else "✗ TIME UP"
+        font_status = pygame.font.SysFont("arial", 28, bold=True)
+        status_surf = font_status.render(status_text, True, status_color)
+        status_rect = status_surf.get_rect(center=(400, 100))
+        self.screen.blit(status_surf, status_rect)
+
+        # 完整句子（空白处填入答案）
+        font_sentence = pygame.font.SysFont("arial", 30, bold=True)
+        filled = question.sentence.replace("____", f" [{question.answer}] ")
+        sentence_surf = font_sentence.render(filled, True, (220, 230, 255))
+        sentence_rect = sentence_surf.get_rect(center=(400, 180))
+        self.screen.blit(sentence_surf, sentence_rect)
+
+        # 分类标签
+        font_tag = pygame.font.SysFont("arial", 18)
+        tag_surf = font_tag.render(f"{question.category}  (difficulty: {question.difficulty})", True, (150, 190, 240))
+        tag_rect = tag_surf.get_rect(center=(400, 220))
+        self.screen.blit(tag_surf, tag_rect)
+
+        # 语法规则
+        font_hint = pygame.font.SysFont("arial", 20)
+        hint_surf = font_hint.render(f"💡 {question.hint}", True, (200, 200, 220))
+        hint_rect = hint_surf.get_rect(center=(400, 280))
+        self.screen.blit(hint_surf, hint_rect)
+
+        # 分数信息
+        if score_mgr:
+            font_score = pygame.font.SysFont("arial", 22, bold=True)
+            score_text = f"Score: {score_mgr.score}   Combo: {score_mgr.combo}x   Words: {score_mgr.word_count}"
+            score_surf = font_score.render(score_text, True, (255, 215, 0))
+            score_rect = score_surf.get_rect(center=(400, 350))
+            self.screen.blit(score_surf, score_rect)
+
+        # 操作提示
+        font_hint2 = pygame.font.SysFont("arial", 18)
+        hint_surf2 = font_hint2.render("Press any key to continue...", True, (100, 100, 120))
+        hint_rect2 = hint_surf2.get_rect(center=(400, 450))
+        self.screen.blit(hint_surf2, hint_rect2)
 
     # ── 暂停画面 ──
 

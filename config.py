@@ -61,6 +61,11 @@ COMBO_BONUS = 30
 COMBO_MULTIPLIER_STEP = 5
 COMBO_MULTIPLIER_INC = 0.5
 
+# 学习引擎
+LEARNING_DATA_PATH = "data/learning.json"
+ADAPTIVE_HIGH_THRESHOLD = 0.8   # 正确率 >80% 升难度
+ADAPTIVE_LOW_THRESHOLD = 0.5    # 正确率 <50% 降难度
+
 # 称号门槛
 TITLES = [
     (0, "Beginner"),

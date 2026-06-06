@@ -4,7 +4,7 @@ from education.question import Question
 
 
 class QuestionBank:
-    """题库管理器：加载、随机出题、筛选"""
+    """题库管理器：加载、随机出题、间隔重复、自适应难度"""
 
     def __init__(self, json_path: str = None):
         self.questions: list[Question] = []
@@ -23,17 +23,61 @@ class QuestionBank:
         random.shuffle(self.questions)
         self._index = 0
 
-    def get_next(self) -> Question:
-        """获取下一题（循环取题，题库耗尽后自动重洗牌）"""
+    def get_next(self, tracker=None) -> Question:
+        """获取下一题（优先出到期复习题）"""
         if not self.questions:
             raise RuntimeError("题库为空，请先加载题目")
 
+        if tracker:
+            due = tracker.get_due_questions(self.questions)
+            if due:
+                q = due[0]
+                tracker.mark_shown(q.id)
+                return q
+
+        # 无 tracker 或无到期题，随机出
         if self._index >= len(self.questions):
             self._index = 0
             random.shuffle(self.questions)
-
         q = self.questions[self._index]
         self._index += 1
+        if tracker:
+            tracker.mark_shown(q.id)
+        return q
+
+    def get_next_adaptive(self, tracker) -> Question:
+        """根据掌握度自适应出题"""
+        if not self.questions:
+            raise RuntimeError("题库为空，请先加载题目")
+
+        # 优先出弱分类的题
+        weak_cats = tracker.get_weakest_categories(top_n=3)
+        if weak_cats:
+            weak_questions = [q for q in self.questions if q.category in weak_cats]
+            if weak_questions:
+                due = tracker.get_due_questions(weak_questions)
+                if due:
+                    q = due[0]
+                    tracker.mark_shown(q.id)
+                    return q
+
+        # 回退到普通间隔重复
+        return self.get_next(tracker)
+
+    def get_practice(self, category: str, tracker=None) -> Question:
+        """按分类出题（练习模式）"""
+        filtered = [q for q in self.questions if q.category == category]
+        if not filtered:
+            raise RuntimeError(f"分类 '{category}' 无题目")
+        if tracker:
+            due = tracker.get_due_questions(filtered)
+            if due:
+                q = due[0]
+                tracker.mark_shown(q.id)
+                return q
+        q = random.choice(filtered)
+        if tracker:
+            tracker.mark_shown(q.id)
         return q
 
     def peek(self) -> Question:

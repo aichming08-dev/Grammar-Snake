@@ -16,7 +16,8 @@ class LetterManager:
         self._next_order = 0  # 玩家接下来该吃第几个正确字母
 
     def spawn(self, answer: str, distractors: list[str] | None = None,
-              occupied: set[tuple[int, int]] | None = None):
+              occupied: set[tuple[int, int]] | None = None,
+              error_patterns: list[str] | None = None):
         """
         在地图上生成字母。
 
@@ -24,6 +25,7 @@ class LetterManager:
             answer: 正确答案字符串，如 "watched"
             distractors: 干扰字母列表，None 则自动生成
             occupied: 已被占据的位置（蛇身等）
+            error_patterns: 常见错误答案，用于生成有意义的干扰字母
         """
         self.letters.clear()
         self._next_order = 0
@@ -40,7 +42,8 @@ class LetterManager:
 
         # 2. 生成干扰字母
         if distractors is None:
-            distractors = self._auto_distractors(answer)
+            count = max(6, len(answer))
+            distractors = self._auto_distractors(answer, count, error_patterns)
 
         for char in distractors:
             pos = self._random_free_pos(occupied_set)
@@ -127,8 +130,23 @@ class LetterManager:
         return random.choice(candidates)
 
     @staticmethod
-    def _auto_distractors(answer: str, count: int = 8) -> list[str]:
-        """自动从字母表中选择干扰字母（排除答案中的字母）"""
+    def _auto_distractors(answer: str, count: int = 8,
+                          error_patterns: list[str] | None = None) -> list[str]:
+        """生成干扰字母：优先使用常见错误形式的字母"""
         answer_set = set(answer.lower())
-        pool = [ch for ch in ALL_LETTERS if ch not in answer_set]
-        return random.sample(pool, min(count, len(pool)))
+        distractors = []
+
+        # 从常见错误答案中取字母（更有教育意义）
+        if error_patterns:
+            for pattern in error_patterns:
+                for ch in pattern.lower():
+                    if ch not in answer_set and ch.isalpha() and ch not in distractors:
+                        distractors.append(ch)
+                        if len(distractors) >= count:
+                            return distractors
+
+        # 不够则从字母表中随机补充
+        pool = [ch for ch in ALL_LETTERS if ch not in answer_set and ch not in distractors]
+        need = count - len(distractors)
+        distractors.extend(random.sample(pool, min(need, len(pool))))
+        return distractors

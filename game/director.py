@@ -15,6 +15,8 @@ from systems.event_bus import EventBus, SNAKE_MOVE, LETTER_CORRECT, LETTER_WRONG
 from ui.renderer import Renderer
 from ui.effects import ScreenEffects, FLASH_CORRECT, FLASH_WRONG, FLASH_COMPLETE
 from systems.sounds import SoundManager
+from systems.learning_tracker import LearningTracker
+from systems.achievements import AchievementManager
 
 
 class GameDirector:
@@ -70,8 +72,25 @@ class GameDirector:
         # 音效
         self.sounds = SoundManager()
 
+        # 学习追踪
+        from config import LEARNING_DATA_PATH
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        learn_path = os.path.join(base_dir, LEARNING_DATA_PATH)
+        self.tracker = LearningTracker(learn_path)
+
+        # 成就系统
+        ach_path = os.path.join(base_dir, "data", "achievements.json")
+        self.achievements = AchievementManager(ach_path)
+
         # 死亡动画
         self._death_timer = 0
+
+        # 上一题结果（用于复习画面）
+        self._last_answer_correct = True
+        self._game_mode = "normal"
+
+        # 蛇阶段追踪
+        self._distractors_eaten = 0
 
     def run(self):
         while self.running:
@@ -79,7 +98,33 @@ class GameDirector:
             self._update()
             self._render()
             self.clock.tick(FPS)
+        self.tracker.save()
+        self.achievements.save()
         pygame.quit()
+
+    def _check_achievements(self):
+        """检查并解锁成就"""
+        wc = self.score_mgr.word_count
+        streak = self.tracker.get_streak_count()
+        mastery = self.tracker.get_category_mastery()
+
+        self.achievements.check_and_unlock("first_word", wc >= 1)
+        self.achievements.check_and_unlock("streak_5", streak >= 5)
+        self.achievements.check_and_unlock("streak_10", streak >= 10)
+        self.achievements.check_and_unlock("streak_20", streak >= 20)
+        self.achievements.check_and_unlock("word_10", wc >= 10)
+        self.achievements.check_and_unlock("word_50", wc >= 50)
+        self.achievements.check_and_unlock("word_100", wc >= 100)
+        self.achievements.check_and_unlock("perfect_snake",
+                                           self._distractors_eaten == 0 and wc > 0)
+        self.achievements.check_and_unlock("category_master",
+                                           any(v >= 0.9 for v in mastery.values()))
+        self.achievements.check_and_unlock("all_categories",
+                                           len(mastery) >= 10)
+
+        # 显示新解锁的成就
+        for ach in self.achievements.get_newly_unlocked():
+            self._show_shout(f"🏆 {ach.name}")
 
     # ── 事件处理 ──
 
@@ -92,14 +137,24 @@ class GameDirector:
             if event.type != pygame.KEYDOWN:
                 continue
 
-            # ── MENU：任意键开始 ──
+            # ── MENU：选择模式 ──
             if self.state == GameState.MENU:
-                self._start_game()
+                if event.key == pygame.K_1:
+                    self._start_game()
+                elif event.key == pygame.K_2:
+                    self._start_practice_mode()
+                elif event.key == pygame.K_3:
+                    self._start_challenge_mode()
                 return
 
             # ── QUESTION：输入答案 ──
             if self.state == GameState.QUESTION:
                 self._handle_question_input(event)
+                return
+
+            # ── QUESTION_DONE：复习画面，任意键继续 ──
+            if self.state == GameState.QUESTION_DONE:
+                self._next_question()
                 return
 
             # ── PAUSED：P/空格恢复，ESC 退出 ──
@@ -139,7 +194,19 @@ class GameDirector:
     # ── 题目管理 ──
 
     def _start_game(self):
-        """从菜单开始游戏"""
+        """从菜单开始游戏（正常模式）"""
+        self._game_mode = "normal"
+        self._next_question()
+
+    def _start_practice_mode(self):
+        """练习模式：优先出弱分类题目"""
+        self._game_mode = "practice"
+        self._next_question()
+
+    def _start_challenge_mode(self):
+        """挑战模式：高速 + 无提示"""
+        self._game_mode = "challenge"
+        self._move_interval = max(MOVE_INTERVAL_MIN, MOVE_INTERVAL_BASE - 3)
         self._next_question()
 
     def _handle_question_input(self, event):
@@ -161,18 +228,49 @@ class GameDirector:
         """验证玩家输入的答案"""
         if not self._input_text:
             return
-        if self._input_text == self.current_question.answer:
-            # 正确 → 进入蛇阶段
+        q = self.current_question
+        if self._input_text == q.answer:
+            # 正确 → 记录学习数据，进入蛇阶段
+            self.tracker.record_answer(q.id, q.category, True)
             self._q_feedback_text = "Correct! Get ready..."
             self._q_feedback_type = "correct"
             self.sounds.play_eat_correct()
             self._start_snake_phase()
         else:
-            # 错误 → 清空输入，显示提示
-            self._q_feedback_text = f"Wrong! Try again. (Answer: {len(self.current_question.answer)} letters)"
+            # 错误 → 记录学习数据，清空输入，显示反馈
+            self.tracker.record_answer(q.id, q.category, False)
+            self._q_feedback_text = self._get_error_feedback(self._input_text, q)
             self._q_feedback_type = "wrong"
             self.sounds.play_eat_wrong()
             self._input_text = ""
+
+    def _get_error_feedback(self, user_input: str, question) -> str:
+        """根据用户输入生成具体的错误反馈"""
+        answer = question.answer
+        # 检查常见错误模式
+        if question.error_patterns:
+            for pattern in question.error_patterns:
+                if user_input == pattern:
+                    return f"'{pattern}' 是常见错误！{question.hint}"
+
+        # 检查 -ing / -ed 混淆
+        if answer.endswith("ed") and user_input == answer[:-2] + "ing":
+            return f"句子需要过去式(-ed)，不是进行时(-ing)。{question.hint}"
+        if answer.endswith("ing") and user_input == answer[:-3] + "ed":
+            return f"句子需要进行时(-ing)，不是过去式(-ed)。{question.hint}"
+
+        # 检查 -s / 原形 混淆
+        if answer.endswith("s") and user_input == answer[:-1]:
+            return f"主语是第三人称单数，动词需要加 -s。{question.hint}"
+        if not answer.endswith("s") and user_input == answer + "s":
+            return f"主语不是第三人称单数，不需要加 -s。{question.hint}"
+
+        # 长度提示
+        if len(user_input) != len(answer):
+            return f"答案有 {len(answer)} 个字母，你输入了 {len(user_input)} 个。再试试！"
+
+        # 通用回退
+        return f"不对哦，再想想！(答案: {len(answer)} 个字母)"
 
     def _reset_game(self):
         """重置所有游戏状态，重新开始"""
@@ -189,12 +287,17 @@ class GameDirector:
         self._input_text = ""
         self._q_feedback_text = ""
         self._q_feedback_type = ""
+        self._game_mode = "normal"
+        self._distractors_eaten = 0
         self.question_bank = QuestionBank(self.question_bank._file_path)
         self._next_question()
 
     def _next_question(self):
         """加载下一题，进入输入答案阶段"""
-        self.current_question = self.question_bank.get_next()
+        if self._game_mode == "practice":
+            self.current_question = self.question_bank.get_next_adaptive(self.tracker)
+        else:
+            self.current_question = self.question_bank.get_next(self.tracker)
         self._input_text = ""
         self._q_feedback_text = ""
         self._q_feedback_type = ""
@@ -202,6 +305,7 @@ class GameDirector:
 
     def _start_snake_phase(self):
         """答案正确，进入蛇吃字母巩固阶段"""
+        self._distractors_eaten = 0
         self.snake = Snake()
         # 速度递增：每完成1个单词，移动间隔减少1帧（更快）
         self._move_interval = max(
@@ -213,6 +317,7 @@ class GameDirector:
             self.current_question.answer,
             self.current_question.distractors,
             occupied,
+            self.current_question.error_patterns,
         )
         self.timer.reset()
         self.state = GameState.PLAYING
@@ -266,6 +371,8 @@ class GameDirector:
             self.state = GameState.DYING
             self._death_timer = 0
             self.sounds.play_death()
+            self.tracker.save()
+            self.achievements.save()
             self.events.emit(GAME_OVER, {"reason": "collision", "score": self.score_mgr.score})
             return
 
@@ -277,6 +384,8 @@ class GameDirector:
 
     def _on_time_up(self):
         """超时处理"""
+        self.tracker.record_answer(self.current_question.id, self.current_question.category, False)
+        self.tracker.save()
         self.events.emit(TIME_UP, {"seconds_left": 0, "question": self.current_question})
         info = self.score_mgr.on_time_up()
         self._show_feedback(
@@ -285,6 +394,7 @@ class GameDirector:
         )
         self.effects.flash(FLASH_WRONG, max_alpha=100)
         self.snake.shrink()
+        self._last_answer_correct = False
         self.state = GameState.QUESTION_DONE
         self._state_timer = QUESTION_DONE_DURATION
 
@@ -327,6 +437,10 @@ class GameDirector:
                     parts.append(f"(时间奖励 +{bonus_info['time_bonus']})")
                 if bonus_info["milestone_bonus"] > 0:
                     parts.append(f"里程碑 +{bonus_info['milestone_bonus']}！")
+                # 完美通关奖励
+                if self._distractors_eaten == 0:
+                    self.score_mgr.score += 100
+                    parts.append("★ 完美通关 +100！")
                 parts.append(self.current_question.hint)
 
                 self._show_feedback("  ".join(parts), "complete", QUESTION_DONE_DURATION)
@@ -340,8 +454,10 @@ class GameDirector:
                     "score": self.score_mgr.score,
                 })
 
+                self._last_answer_correct = True
                 self.state = GameState.QUESTION_DONE
                 self._state_timer = QUESTION_DONE_DURATION
+                self._check_achievements()
         else:
             # ── 错误 ──
             self.snake.shrink()
@@ -350,6 +466,7 @@ class GameDirector:
 
             # 干扰字母被吃掉后补充一个新的
             if not result["correct"]:
+                self._distractors_eaten += 1
                 occupied = set(self.snake.body)
                 self.letter_manager.replenish_distractor(
                     self.current_question.answer, occupied,
@@ -420,11 +537,21 @@ class GameDirector:
             pygame.display.flip()
             return
 
-        # ── 游戏画面（PLAYING / PAUSED / QUESTION_DONE / GAME_OVER 共用） ──
+        # ── QUESTION_DONE：复习画面 ──
+        if self.state == GameState.QUESTION_DONE:
+            self.renderer.draw_review_screen(
+                self.current_question,
+                self.score_mgr,
+                self._last_answer_correct,
+            )
+            pygame.display.flip()
+            return
+
+        # ── 游戏画面（PLAYING / PAUSED / GAME_OVER 共用） ──
         self.renderer.draw_grid()
         self.renderer.draw_snake(self.snake)
 
-        if self.state in (GameState.PLAYING, GameState.QUESTION_DONE):
+        if self.state == GameState.PLAYING:
             self.renderer.draw_letters(self.letter_manager)
 
         # 屏幕特效（覆盖在游戏区域上）
