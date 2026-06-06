@@ -44,7 +44,11 @@ class GameState:
     PLAYING = "playing"
     PAUSED = "paused"
     QUESTION_DONE = "question_done"
+    DYING = "dying"
     GAME_OVER = "game_over"
+
+# 死亡动画
+DEATH_ANIM_SPEED = 3        # 每 N 帧擦除一节蛇身
 
 # 评分配置
 SCORE_PER_LETTER = 10

@@ -4,6 +4,7 @@ from config import (
     TITLE, FPS, COLS, ROWS, Direction, GameState,
     FEEDBACK_DURATION, QUESTION_DONE_DURATION, TIMER_PENALTY_SECONDS,
     MOVE_INTERVAL_BASE, MOVE_INTERVAL_MIN, SPEED_UP_PER_WORD,
+    DEATH_ANIM_SPEED,
 )
 from game.snake import Snake
 from game.letter_manager import LetterManager
@@ -13,6 +14,7 @@ from systems.timer import QuestionTimer
 from systems.event_bus import EventBus, SNAKE_MOVE, LETTER_CORRECT, LETTER_WRONG, WORD_COMPLETE, GAME_OVER, TIME_UP
 from ui.renderer import Renderer
 from ui.effects import ScreenEffects, FLASH_CORRECT, FLASH_WRONG, FLASH_COMPLETE
+from systems.sounds import SoundManager
 
 
 class GameDirector:
@@ -60,6 +62,12 @@ class GameDirector:
         # 事件总线
         self.events = EventBus()
 
+        # 音效
+        self.sounds = SoundManager()
+
+        # 死亡动画
+        self._death_timer = 0
+
     def run(self):
         while self.running:
             self._handle_events()
@@ -90,6 +98,10 @@ class GameDirector:
                     self.state = GameState.PLAYING
                 elif event.key == pygame.K_ESCAPE:
                     self.running = False
+                return
+
+            # ── DYING：忽略所有输入 ──
+            if self.state == GameState.DYING:
                 return
 
             # ── GAME_OVER：R 重启，ESC 退出 ──
@@ -164,6 +176,15 @@ class GameDirector:
         if self.state in (GameState.MENU, GameState.PAUSED, GameState.GAME_OVER):
             return
 
+        # DYING：死亡动画（蛇身逐节消失）
+        if self.state == GameState.DYING:
+            self._death_timer += 1
+            if self._death_timer % DEATH_ANIM_SPEED == 0 and len(self.snake.body) > 0:
+                self.snake.body.pop()
+            if len(self.snake.body) == 0:
+                self.state = GameState.GAME_OVER
+            return
+
         # QUESTION_DONE 等待 → 下一题
         if self.state == GameState.QUESTION_DONE:
             self._state_timer -= 1
@@ -190,9 +211,10 @@ class GameDirector:
 
         # 碰撞检测
         if self.snake.hits_boundary() or self.snake.hits_self():
-            self.state = GameState.GAME_OVER
+            self.state = GameState.DYING
+            self._death_timer = 0
+            self.sounds.play_death()
             self.events.emit(GAME_OVER, {"reason": "collision", "score": self.score_mgr.score})
-            print("Game Over!")
             return
 
         # 吃字母检测
@@ -222,6 +244,7 @@ class GameDirector:
             # ── 正确 ──
             self.snake.grow()
             info = self.score_mgr.on_correct_letter()
+            self.sounds.play_eat_correct()
 
             self.effects.flash(FLASH_CORRECT, max_alpha=60)
             self.events.emit(LETTER_CORRECT, {
@@ -256,6 +279,7 @@ class GameDirector:
 
                 self._show_feedback("  ".join(parts), "complete", QUESTION_DONE_DURATION)
                 self.effects.flash(FLASH_COMPLETE, max_alpha=100, decay=2)
+                self.sounds.play_word_complete()
 
                 self.events.emit(WORD_COMPLETE, {
                     "question": self.current_question,
@@ -270,6 +294,14 @@ class GameDirector:
             # ── 错误 ──
             self.snake.shrink()
             info = self.score_mgr.on_wrong_letter()
+            self.sounds.play_eat_wrong()
+
+            # 干扰字母被吃掉后补充一个新的
+            if not result["correct"]:
+                occupied = set(self.snake.body)
+                self.letter_manager.replenish_distractor(
+                    self.current_question.answer, occupied,
+                )
 
             # 倒计时惩罚
             self.timer.penalize()

@@ -78,6 +78,24 @@ class LetterManager:
         else:
             return {"correct": True, "in_order": False, "combo_ok": False}
 
+    def replenish_distractor(self, answer: str,
+                             occupied: set[tuple[int, int]] | None = None):
+        """吃掉干扰字母后，在随机空位补充一个新的干扰字母"""
+        answer_set = set(answer.lower())
+        pool = [ch for ch in ALL_LETTERS if ch not in answer_set]
+        if not pool:
+            return
+        char = random.choice(pool)
+        occ = set(occupied) if occupied else set()
+        # 加入已有的字母位置
+        for ltr in self.letters:
+            if not ltr.eaten:
+                occ.add((ltr.col, ltr.row))
+        pos = self._random_free_pos(occ)
+        if pos is not None:
+            col, row = pos
+            self.letters.append(Letter(char, col, row, is_correct=False))
+
     def is_word_complete(self) -> bool:
         """答案单词是否已被完整拼出"""
         return self._next_order > 0 and all(
