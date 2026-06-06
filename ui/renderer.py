@@ -2,6 +2,8 @@ import math
 import pygame
 from config import (
     COLS, ROWS, GRID_SIZE, GRID_Y_OFFSET, BG_COLOR, GREEN, DARK_GREEN, WHITE, BLACK,
+    SNAKE_HEAD_COLOR, SNAKE_TAIL_COLOR, SNAKE_EYE_WHITE, SNAKE_EYE_PUPIL,
+    GRID_LINE_COLOR, SNAKE_BORDER_RADIUS, Direction,
 )
 from ui.hud import HUD
 
@@ -27,22 +29,83 @@ class Renderer:
         """网格行中心 → 屏幕 y 中心"""
         return GRID_Y_OFFSET + row * GRID_SIZE + GRID_SIZE // 2
 
+    @staticmethod
+    def _lerp_color(c1: tuple, c2: tuple, t: float) -> tuple:
+        """线性插值两个颜色"""
+        return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))
+
+    def _draw_eyes(self, col: int, row: int, direction: tuple):
+        """在蛇头上绘制方向眼睛"""
+        cx = col * GRID_SIZE + GRID_SIZE // 2
+        cy = self._gcy(row)
+        eye_r = 4      # 眼白半径
+        pupil_r = 2     # 瞳孔半径
+        offset = 5      # 眼睛中心偏移量
+        spread = 6      # 两只眼睛间距
+
+        dx, dy = direction
+        if direction == Direction.RIGHT:
+            left = (cx + offset, cy - spread)
+            right = (cx + offset, cy + spread)
+            pupil_off = (2, 0)
+        elif direction == Direction.LEFT:
+            left = (cx - offset, cy - spread)
+            right = (cx - offset, cy + spread)
+            pupil_off = (-2, 0)
+        elif direction == Direction.UP:
+            left = (cx - spread, cy - offset)
+            right = (cx + spread, cy - offset)
+            pupil_off = (0, -2)
+        else:  # DOWN
+            left = (cx - spread, cy + offset)
+            right = (cx + spread, cy + offset)
+            pupil_off = (0, 2)
+
+        # 眼白
+        pygame.draw.circle(self.screen, SNAKE_EYE_WHITE, left, eye_r)
+        pygame.draw.circle(self.screen, SNAKE_EYE_WHITE, right, eye_r)
+        # 瞳孔
+        pygame.draw.circle(self.screen, SNAKE_EYE_PUPIL,
+                           (left[0] + pupil_off[0], left[1] + pupil_off[1]), pupil_r)
+        pygame.draw.circle(self.screen, SNAKE_EYE_PUPIL,
+                           (right[0] + pupil_off[0], right[1] + pupil_off[1]), pupil_r)
+
     def draw_grid(self):
-        """绘制纯色游戏背景（无网格线）"""
+        """绘制游戏背景 + 淡灰色网格线"""
         game_rect = pygame.Rect(0, GRID_Y_OFFSET, 800, 600 - GRID_Y_OFFSET)
         self.screen.fill(BG_COLOR, game_rect)
 
+        # 竖线
+        for c in range(COLS + 1):
+            x = c * GRID_SIZE
+            pygame.draw.line(self.screen, GRID_LINE_COLOR,
+                             (x, GRID_Y_OFFSET), (x, 600))
+        # 横线
+        for r in range(ROWS + 1):
+            y = GRID_Y_OFFSET + r * GRID_SIZE
+            pygame.draw.line(self.screen, GRID_LINE_COLOR,
+                             (0, y), (800, y))
+
     def draw_snake(self, snake):
-        """绘制蛇"""
+        """绘制蛇（渐变色 + 圆角 + 蛇头眼睛）"""
+        body_len = len(snake.body)
         for i, (col, row) in enumerate(snake.body):
-            color = GREEN if i == 0 else DARK_GREEN
+            # 渐变色：蛇头亮绿 → 蛇尾深绿
+            t = i / max(body_len - 1, 1)
+            color = self._lerp_color(SNAKE_HEAD_COLOR, SNAKE_TAIL_COLOR, t)
+
             rect = pygame.Rect(
                 col * GRID_SIZE + 1,
                 self._gy(row) + 1,
                 GRID_SIZE - 2,
                 GRID_SIZE - 2,
             )
-            pygame.draw.rect(self.screen, color, rect)
+            pygame.draw.rect(self.screen, color, rect, border_radius=SNAKE_BORDER_RADIUS)
+
+        # 蛇头眼睛
+        if body_len > 0:
+            head_col, head_row = snake.body[0]
+            self._draw_eyes(head_col, head_row, snake.direction)
 
     def draw_letters(self, letter_manager):
         """绘制所有字母"""

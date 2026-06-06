@@ -19,6 +19,18 @@ GREEN = (0, 200, 0)
 DARK_GREEN = (0, 150, 0)
 BG_COLOR = (30, 30, 30)
 
+# 蛇身渐变色
+SNAKE_HEAD_COLOR = (80, 255, 80)      # 蛇头亮绿
+SNAKE_TAIL_COLOR = (20, 100, 20)      # 蛇尾深绿
+SNAKE_EYE_WHITE = (255, 255, 255)
+SNAKE_EYE_PUPIL = (0, 0, 0)
+
+# 网格线
+GRID_LINE_COLOR = (40, 40, 40)
+
+# 圆角
+SNAKE_BORDER_RADIUS = 6
+
 # 方向
 class Direction:
     UP = (0, -1)
