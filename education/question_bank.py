@@ -9,6 +9,7 @@ class QuestionBank:
     def __init__(self, json_path: str = None):
         self.questions: list[Question] = []
         self._index = 0
+        self._file_path = json_path
         if json_path:
             self.load(json_path)
 

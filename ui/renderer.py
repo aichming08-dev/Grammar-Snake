@@ -1,3 +1,4 @@
+import math
 import pygame
 from config import (
     COLS, ROWS, GRID_SIZE, GRID_Y_OFFSET, BG_COLOR, GREEN, DARK_GREEN, WHITE, BLACK,
@@ -66,3 +67,103 @@ class Renderer:
         """绘制 HUD 覆盖层"""
         self._hud.draw(question, letter_manager, score_mgr, timer,
                        feedback_text, feedback_type)
+
+    # ── 开始菜单 ──
+
+    def draw_menu(self):
+        """绘制开始菜单"""
+        self.screen.fill(BG_COLOR)
+
+        # 标题
+        title_font = pygame.font.SysFont("arial", 64, bold=True)
+        title_surf = title_font.render("Grammar Snake", True, (255, 215, 0))
+        title_rect = title_surf.get_rect(center=(400, 220))
+        self.screen.blit(title_surf, title_rect)
+
+        # 蛇图标（简单装饰）
+        icon_y = 300
+        for i in range(5):
+            x = 340 + i * 28
+            color = GREEN if i == 0 else DARK_GREEN
+            pygame.draw.rect(self.screen, color, (x, icon_y, 24, 24), border_radius=6)
+
+        # 副标题（闪烁效果）
+        tick = pygame.time.get_ticks()
+        alpha = int(128 + 127 * math.sin(tick * 0.004))
+        sub_font = pygame.font.SysFont("arial", 24)
+        sub_surf = sub_font.render("Press any key to start", True, WHITE)
+        sub_surf.set_alpha(alpha)
+        sub_rect = sub_surf.get_rect(center=(400, 380))
+        self.screen.blit(sub_surf, sub_rect)
+
+        # 操作提示
+        hint_font = pygame.font.SysFont("arial", 16)
+        hints = [
+            "Arrow Keys - Move",
+            "P - Pause",
+            "ESC - Quit",
+        ]
+        for i, hint in enumerate(hints):
+            h_surf = hint_font.render(hint, True, (120, 120, 140))
+            h_rect = h_surf.get_rect(center=(400, 440 + i * 24))
+            self.screen.blit(h_surf, h_rect)
+
+    # ── 暂停画面 ──
+
+    def draw_pause_overlay(self):
+        """在游戏画面上叠加暂停遮罩"""
+        overlay = pygame.Surface((800, 600), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        self.screen.blit(overlay, (0, 0))
+
+        # PAUSED 文字
+        font = pygame.font.SysFont("arial", 56, bold=True)
+        surf = font.render("PAUSED", True, WHITE)
+        rect = surf.get_rect(center=(400, 270))
+        self.screen.blit(surf, rect)
+
+        # 提示
+        hint_font = pygame.font.SysFont("arial", 22)
+        hint_surf = hint_font.render("Press P to resume", True, (180, 180, 200))
+        hint_rect = hint_surf.get_rect(center=(400, 330))
+        self.screen.blit(hint_surf, hint_rect)
+
+    # ── Game Over 画面 ──
+
+    def draw_game_over(self, score_mgr):
+        """在游戏画面上叠加结算画面"""
+        overlay = pygame.Surface((800, 600), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        self.screen.blit(overlay, (0, 0))
+
+        # GAME OVER
+        title_font = pygame.font.SysFont("arial", 56, bold=True)
+        title_surf = title_font.render("GAME OVER", True, (220, 60, 60))
+        title_rect = title_surf.get_rect(center=(400, 180))
+        self.screen.blit(title_surf, title_rect)
+
+        # 统计信息
+        stat_font = pygame.font.SysFont("arial", 26, bold=True)
+        label_font = pygame.font.SysFont("arial", 18)
+
+        stats = [
+            ("SCORE", str(score_mgr.score), (255, 215, 0)),
+            ("WORDS", str(score_mgr.word_count), (100, 255, 120)),
+            ("MAX COMBO", f"{score_mgr.max_combo}x", (255, 220, 80)),
+        ]
+
+        y = 250
+        for label, value, color in stats:
+            label_surf = label_font.render(label, True, (140, 150, 170))
+            val_surf = stat_font.render(value, True, color)
+            label_rect = label_surf.get_rect(center=(400, y))
+            val_rect = val_surf.get_rect(center=(400, y + 26))
+            self.screen.blit(label_surf, label_rect)
+            self.screen.blit(val_surf, val_rect)
+            y += 65
+
+        # 重启提示
+        hint_font = pygame.font.SysFont("arial", 20)
+        hint_surf = hint_font.render("Press R to restart / ESC to quit", True, (180, 180, 200))
+        hint_rect = hint_surf.get_rect(center=(400, 480))
+        self.screen.blit(hint_surf, hint_rect)

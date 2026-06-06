@@ -24,7 +24,7 @@ class GameDirector:
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
         self.running = True
-        self.state = GameState.PLAYING
+        self.state = GameState.MENU
         self.renderer = Renderer(self.screen)
         self.effects = ScreenEffects(self.screen)
 
@@ -60,9 +60,6 @@ class GameDirector:
         # 事件总线
         self.events = EventBus()
 
-        # 开始第一题
-        self._next_question()
-
     def run(self):
         while self.running:
             self._handle_events()
@@ -77,19 +74,66 @@ class GameDirector:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+                return
+
+            if event.type != pygame.KEYDOWN:
+                continue
+
+            # ── MENU：任意键开始 ──
+            if self.state == GameState.MENU:
+                self._start_game()
+                return
+
+            # ── PAUSED：P/空格恢复，ESC 退出 ──
+            if self.state == GameState.PAUSED:
+                if event.key in (pygame.K_p, pygame.K_SPACE):
+                    self.state = GameState.PLAYING
+                elif event.key == pygame.K_ESCAPE:
                     self.running = False
-                elif event.key == pygame.K_UP:
-                    self.snake.set_direction(Direction.UP)
-                elif event.key == pygame.K_DOWN:
-                    self.snake.set_direction(Direction.DOWN)
-                elif event.key == pygame.K_LEFT:
-                    self.snake.set_direction(Direction.LEFT)
-                elif event.key == pygame.K_RIGHT:
-                    self.snake.set_direction(Direction.RIGHT)
+                return
+
+            # ── GAME_OVER：R 重启，ESC 退出 ──
+            if self.state == GameState.GAME_OVER:
+                if event.key == pygame.K_r:
+                    self._reset_game()
+                elif event.key == pygame.K_ESCAPE:
+                    self.running = False
+                return
+
+            # ── PLAYING：方向键、暂停、退出 ──
+            if event.key == pygame.K_ESCAPE:
+                self.running = False
+            elif event.key in (pygame.K_p, pygame.K_SPACE):
+                self.state = GameState.PAUSED
+            elif event.key == pygame.K_UP:
+                self.snake.set_direction(Direction.UP)
+            elif event.key == pygame.K_DOWN:
+                self.snake.set_direction(Direction.DOWN)
+            elif event.key == pygame.K_LEFT:
+                self.snake.set_direction(Direction.LEFT)
+            elif event.key == pygame.K_RIGHT:
+                self.snake.set_direction(Direction.RIGHT)
 
     # ── 题目管理 ──
+
+    def _start_game(self):
+        """从菜单开始游戏"""
+        self._next_question()
+
+    def _reset_game(self):
+        """重置所有游戏状态，重新开始"""
+        self.snake = Snake()
+        self.score_mgr = ScoreManager()
+        self.timer = QuestionTimer()
+        self._move_counter = 0
+        self._move_interval = MOVE_INTERVAL_BASE
+        self.feedback_text = ""
+        self.feedback_type = ""
+        self.feedback_timer = 0
+        self.shout_text = ""
+        self.shout_timer = 0
+        self.question_bank = QuestionBank(self.question_bank._file_path)
+        self._next_question()
 
     def _next_question(self):
         """加载下一题"""
@@ -115,6 +159,10 @@ class GameDirector:
         self.effects.tick()
         self._tick_feedback()
         self._tick_shout()
+
+        # MENU / PAUSED / GAME_OVER：不更新游戏逻辑
+        if self.state in (GameState.MENU, GameState.PAUSED, GameState.GAME_OVER):
+            return
 
         # QUESTION_DONE 等待 → 下一题
         if self.state == GameState.QUESTION_DONE:
@@ -271,6 +319,13 @@ class GameDirector:
     # ── 渲染 ──
 
     def _render(self):
+        # ── MENU：独立菜单画面 ──
+        if self.state == GameState.MENU:
+            self.renderer.draw_menu()
+            pygame.display.flip()
+            return
+
+        # ── 游戏画面（PLAYING / PAUSED / QUESTION_DONE / GAME_OVER 共用） ──
         self.renderer.draw_grid()
         self.renderer.draw_snake(self.snake)
 
@@ -294,6 +349,14 @@ class GameDirector:
         # 连击播报（游戏区域中央）
         if self.shout_text:
             self._draw_shout(self.shout_text)
+
+        # ── PAUSED：叠加暂停遮罩 ──
+        if self.state == GameState.PAUSED:
+            self.renderer.draw_pause_overlay()
+
+        # ── GAME_OVER：叠加结算画面 ──
+        if self.state == GameState.GAME_OVER:
+            self.renderer.draw_game_over(self.score_mgr)
 
         pygame.display.flip()
 
