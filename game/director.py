@@ -52,6 +52,11 @@ class GameDirector:
         self.feedback_type = ""
         self.feedback_timer = 0
 
+        # 答案输入阶段
+        self._input_text = ""
+        self._q_feedback_text = ""
+        self._q_feedback_type = ""
+
         # 连击播报（短暂显示在屏幕上）
         self.shout_text = ""
         self.shout_timer = 0
@@ -90,6 +95,11 @@ class GameDirector:
             # ── MENU：任意键开始 ──
             if self.state == GameState.MENU:
                 self._start_game()
+                return
+
+            # ── QUESTION：输入答案 ──
+            if self.state == GameState.QUESTION:
+                self._handle_question_input(event)
                 return
 
             # ── PAUSED：P/空格恢复，ESC 退出 ──
@@ -132,6 +142,38 @@ class GameDirector:
         """从菜单开始游戏"""
         self._next_question()
 
+    def _handle_question_input(self, event):
+        """处理 QUESTION 状态下的键盘输入"""
+        if event.key == pygame.K_BACKSPACE:
+            self._input_text = self._input_text[:-1]
+            self._q_feedback_text = ""
+            self._q_feedback_type = ""
+        elif event.key == pygame.K_RETURN:
+            self._check_answer()
+        elif event.key == pygame.K_ESCAPE:
+            self.running = False
+        elif event.unicode and event.unicode.isalpha() and len(self._input_text) < 20:
+            self._input_text += event.unicode.lower()
+            self._q_feedback_text = ""
+            self._q_feedback_type = ""
+
+    def _check_answer(self):
+        """验证玩家输入的答案"""
+        if not self._input_text:
+            return
+        if self._input_text == self.current_question.answer:
+            # 正确 → 进入蛇阶段
+            self._q_feedback_text = "Correct! Get ready..."
+            self._q_feedback_type = "correct"
+            self.sounds.play_eat_correct()
+            self._start_snake_phase()
+        else:
+            # 错误 → 清空输入，显示提示
+            self._q_feedback_text = f"Wrong! Try again. (Answer: {len(self.current_question.answer)} letters)"
+            self._q_feedback_type = "wrong"
+            self.sounds.play_eat_wrong()
+            self._input_text = ""
+
     def _reset_game(self):
         """重置所有游戏状态，重新开始"""
         self.snake = Snake()
@@ -144,12 +186,22 @@ class GameDirector:
         self.feedback_timer = 0
         self.shout_text = ""
         self.shout_timer = 0
+        self._input_text = ""
+        self._q_feedback_text = ""
+        self._q_feedback_type = ""
         self.question_bank = QuestionBank(self.question_bank._file_path)
         self._next_question()
 
     def _next_question(self):
-        """加载下一题"""
+        """加载下一题，进入输入答案阶段"""
         self.current_question = self.question_bank.get_next()
+        self._input_text = ""
+        self._q_feedback_text = ""
+        self._q_feedback_type = ""
+        self.state = GameState.QUESTION
+
+    def _start_snake_phase(self):
+        """答案正确，进入蛇吃字母巩固阶段"""
         self.snake = Snake()
         # 速度递增：每完成1个单词，移动间隔减少1帧（更快）
         self._move_interval = max(
@@ -172,8 +224,8 @@ class GameDirector:
         self._tick_feedback()
         self._tick_shout()
 
-        # MENU / PAUSED / GAME_OVER：不更新游戏逻辑
-        if self.state in (GameState.MENU, GameState.PAUSED, GameState.GAME_OVER):
+        # MENU / QUESTION / PAUSED / GAME_OVER：不更新游戏逻辑
+        if self.state in (GameState.MENU, GameState.QUESTION, GameState.PAUSED, GameState.GAME_OVER):
             return
 
         # DYING：死亡动画（蛇身逐节消失）
@@ -354,6 +406,17 @@ class GameDirector:
         # ── MENU：独立菜单画面 ──
         if self.state == GameState.MENU:
             self.renderer.draw_menu()
+            pygame.display.flip()
+            return
+
+        # ── QUESTION：输入答案画面 ──
+        if self.state == GameState.QUESTION:
+            self.renderer.draw_question_screen(
+                self.current_question,
+                self._input_text,
+                self._q_feedback_text,
+                self._q_feedback_type,
+            )
             pygame.display.flip()
             return
 

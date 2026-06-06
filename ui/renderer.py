@@ -171,6 +171,85 @@ class Renderer:
             h_rect = h_surf.get_rect(center=(400, 440 + i * 24))
             self.screen.blit(h_surf, h_rect)
 
+    # ── 输入答案画面 ──
+
+    def draw_question_screen(self, question, input_text: str,
+                             feedback_text: str = "", feedback_type: str = ""):
+        """绘制输入答案阶段画面"""
+        self.screen.fill(BG_COLOR)
+
+        # 难度星标
+        stars = "★" * question.difficulty + "☆" * (5 - question.difficulty)
+
+        # ── 题目句子 ──
+        font_sentence = pygame.font.SysFont("arial", 36, bold=True)
+        display = question.sentence.replace("____", " ______ ")
+        sentence_surf = font_sentence.render(display, True, (220, 230, 255))
+        sentence_rect = sentence_surf.get_rect(center=(400, 160))
+        self.screen.blit(sentence_surf, sentence_rect)
+
+        # 分类 + 难度
+        font_tag = pygame.font.SysFont("arial", 20)
+        tag_text = f"{question.category}   {stars}"
+        tag_surf = font_tag.render(tag_text, True, (150, 190, 240))
+        tag_rect = tag_surf.get_rect(center=(400, 210))
+        self.screen.blit(tag_surf, tag_rect)
+
+        # ── 输入框 ──
+        box_w = 400
+        box_h = 60
+        box_x = (800 - box_w) // 2
+        box_y = 270
+
+        # 输入框背景 + 边框
+        border_color = (100, 100, 120)
+        if feedback_type == "correct":
+            border_color = (80, 255, 80)
+        elif feedback_type == "wrong":
+            border_color = (255, 80, 80)
+
+        pygame.draw.rect(self.screen, (20, 20, 35), (box_x, box_y, box_w, box_h), border_radius=8)
+        pygame.draw.rect(self.screen, border_color, (box_x, box_y, box_w, box_h), 2, border_radius=8)
+
+        # 已输入字母（大号居中）
+        font_input = pygame.font.SysFont("arial", 32, bold=True)
+        display_text = input_text.upper()
+        if display_text:
+            input_surf = font_input.render(display_text, True, WHITE)
+        else:
+            input_surf = font_input.render("", True, (60, 60, 70))
+        input_rect = input_surf.get_rect(center=(400, box_y + box_h // 2))
+        self.screen.blit(input_surf, input_rect)
+
+        # 光标闪烁
+        tick = pygame.time.get_ticks()
+        if (tick // 500) % 2 == 0:
+            cursor_x = input_rect.right + 4
+            pygame.draw.line(self.screen, WHITE,
+                             (cursor_x, box_y + 12), (cursor_x, box_y + box_h - 12), 2)
+
+        # ── Hint 提示 ──
+        if question.hint:
+            font_hint = pygame.font.SysFont("arial", 18)
+            hint_surf = font_hint.render(f"💡 {question.hint}", True, (180, 180, 200))
+            hint_rect = hint_surf.get_rect(center=(400, 370))
+            self.screen.blit(hint_surf, hint_rect)
+
+        # ── 反馈文字 ──
+        if feedback_text:
+            font_fb = pygame.font.SysFont("arial", 22, bold=True)
+            fb_color = (100, 255, 120) if feedback_type == "correct" else (255, 100, 100)
+            fb_surf = font_fb.render(feedback_text, True, fb_color)
+            fb_rect = fb_surf.get_rect(center=(400, 420))
+            self.screen.blit(fb_surf, fb_rect)
+
+        # ── 操作提示 ──
+        font_hint2 = pygame.font.SysFont("arial", 16)
+        hints = "Type your answer · Enter to confirm · Backspace to delete"
+        hints_surf = font_hint2.render(hints, True, (100, 100, 120))
+        hints_rect = hints_surf.get_rect(center=(400, 500))
+        self.screen.blit(hints_surf, hints_rect)
+
     # ── 暂停画面 ──
 
     def draw_pause_overlay(self):

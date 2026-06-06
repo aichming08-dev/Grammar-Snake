@@ -41,7 +41,8 @@ class Direction:
 # 游戏状态
 class GameState:
     MENU = "menu"
-    PLAYING = "playing"
+    QUESTION = "question"      # 输入答案阶段
+    PLAYING = "playing"        # 蛇吃字母阶段
     PAUSED = "paused"
     QUESTION_DONE = "question_done"
     DYING = "dying"
